@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/poll",
+      "schedule": "* * * * *"
+    }
+  ],
+  "functions": {
+    "api/telegram.ts": { "maxDuration": 30 },
+    "api/poll.ts": { "maxDuration": 60 }
+  }
+}
