@@ -42,7 +42,7 @@ export async function sendNotification(params: SendNotificationParams): Promise<
   // Fetch the label for this Safe in this community
   const label = await getMonitoredSafeLabel(community.id, safeAddress, chainId);
 
-  const message = formatNotificationMessage({
+  const message = await formatNotificationMessage({
     tx: safeTx,
     safeAddress,
     chainId,

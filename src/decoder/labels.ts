@@ -47,6 +47,7 @@ const KNOWN_LABELS: Record<number, Record<string, string>> = {
   },
   // Base
   8453: {
+    '0xf142022273602c6a6c0ea7a044d21082273bd686': 'myk × clawd Safe',
     '0x000000000022d473030f116ddee9f6b43ac78ba3': 'Permit2',
     '0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad': 'Uniswap Universal Router',
     '0x4752ba5dbc23f44d87826276bf6fd6b1c372ad24': 'Uniswap V2 Router',

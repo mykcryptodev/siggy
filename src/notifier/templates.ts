@@ -26,9 +26,11 @@ function formatValue(valueWei: string | null, nativeCurrency: string): string {
   }
 }
 
-function getSafeLabel(safeAddress: string, label: string | null): string {
+async function getSafeLabel(safeAddress: string, label: string | null, chainId: number): Promise<string> {
   if (label) return escapeHtml(label);
-  return shortenAddress(safeAddress);
+  // Try to resolve via known labels / ENS / Basenames
+  const resolved = await labelAddress(safeAddress, chainId);
+  return escapeHtml(resolved);
 }
 
 function getSummary(decoded: DecodedSummaryJson | null, tx: SafeTx): string {
@@ -45,17 +47,17 @@ function getWarnings(decoded: DecodedSummaryJson | null): string {
 /**
  * Format a "New pending transaction" notification message (HTML)
  */
-export function formatPendingMessage(params: {
+export async function formatPendingMessage(params: {
   tx: SafeTx;
   safeAddress: string;
   chainId: number;
   label: string | null;
-}): string {
+}): Promise<string> {
   const { tx, safeAddress, chainId, label } = params;
   const chain = getChain(chainId);
   const decoded = tx.decodedSummary as DecodedSummaryJson | null;
 
-  const safeLabel = getSafeLabel(safeAddress, label);
+  const safeLabel = await getSafeLabel(safeAddress, label, chainId);
   const summary = getSummary(decoded, tx);
   const warnings = getWarnings(decoded);
   const value = formatValue(tx.valueWei, chain.nativeCurrency);
@@ -75,17 +77,17 @@ export function formatPendingMessage(params: {
 /**
  * Format a "Transaction executed" notification message (HTML)
  */
-export function formatExecutedMessage(params: {
+export async function formatExecutedMessage(params: {
   tx: SafeTx;
   safeAddress: string;
   chainId: number;
   label: string | null;
-}): string {
+}): Promise<string> {
   const { tx, safeAddress, chainId, label } = params;
   const chain = getChain(chainId);
   const decoded = tx.decodedSummary as DecodedSummaryJson | null;
 
-  const safeLabel = getSafeLabel(safeAddress, label);
+  const safeLabel = await getSafeLabel(safeAddress, label, chainId);
   const summary = getSummary(decoded, tx);
 
   let explorerLine = '';
@@ -109,17 +111,17 @@ export function formatExecutedMessage(params: {
 /**
  * Format a "Transaction cancelled" notification message (HTML)
  */
-export function formatCancelledMessage(params: {
+export async function formatCancelledMessage(params: {
   tx: SafeTx;
   safeAddress: string;
   chainId: number;
   label: string | null;
-}): string {
+}): Promise<string> {
   const { tx, safeAddress, chainId, label } = params;
   const chain = getChain(chainId);
   const decoded = tx.decodedSummary as DecodedSummaryJson | null;
 
-  const safeLabel = getSafeLabel(safeAddress, label);
+  const safeLabel = await getSafeLabel(safeAddress, label, chainId);
   const summary = getSummary(decoded, tx);
 
   return (
@@ -133,13 +135,13 @@ export function formatCancelledMessage(params: {
 /**
  * Get the appropriate message for a notification type
  */
-export function formatNotificationMessage(params: {
+export async function formatNotificationMessage(params: {
   tx: SafeTx;
   safeAddress: string;
   chainId: number;
   label: string | null;
   notificationType: NotificationType;
-}): string {
+}): Promise<string> {
   switch (params.notificationType) {
     case 'pending':
       return formatPendingMessage(params);
