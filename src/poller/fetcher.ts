@@ -45,7 +45,7 @@ export const SafeMultisigTransactionSchema = z.object({
   confirmations: z.array(ConfirmationSchema).nullable(),
   trusted: z.boolean(),
   signatures: z.string().nullable(),
-});
+}).passthrough();
 
 export type SafeMultisigTransaction = z.infer<typeof SafeMultisigTransactionSchema>;
 
@@ -54,7 +54,7 @@ const SafeMultisigTransactionsResponseSchema = z.object({
   next: z.string().nullable(),
   previous: z.string().nullable(),
   results: z.array(SafeMultisigTransactionSchema),
-});
+}).passthrough();
 
 // ──────────────────────────────────────────────
 // Fetcher
@@ -92,6 +92,7 @@ export async function fetchMultisigTransactions(
       headers: {
         Accept: 'application/json',
       },
+      redirect: 'follow',
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
   } catch (err) {
