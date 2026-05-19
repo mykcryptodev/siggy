@@ -3,23 +3,23 @@
  *
  * Priority order:
  * 1. Known contracts (curated hardcoded list, per-chain)
- * 2. ENS primary name (mainnet only, via public RPC)
- * 3. Basenames (Base chain, via L2 resolver)
+ * 2. Zapper GraphQL API (ENS, Farcaster, Lens, Basenames, display names — all in one call)
+ * 3. Thirdweb social profiles (Farcaster, Lens, ENS fallback)
  * 4. Shortened address fallback
  */
 
-import { createPublicClient, http, type Address, parseAbi } from 'viem';
+import { createThirdwebClient } from 'thirdweb';
+import { getSocialProfiles } from 'thirdweb/social';
+import type { Address } from 'viem';
 
 // ─────────────────────────────────────────────
 // Curated known address labels (chain-specific)
 // ─────────────────────────────────────────────
 
-// Format: { [chainId]: { [addressLowercase]: label } }
 const KNOWN_LABELS: Record<number, Record<string, string>> = {
-  // All chains — Permit2 is deployed at same address everywhere
+  // All chains (chainId 0 = global)
   0: {
     '0x000000000022d473030f116ddee9f6b43ac78ba3': 'Permit2',
-    '0x000000000022d473030f116ddee9f6b43ac78ba4': 'Permit2',
   },
   // Ethereum mainnet
   1: {
@@ -41,9 +41,7 @@ const KNOWN_LABELS: Record<number, Record<string, string>> = {
     '0x6b175474e89094c44da98b954eedeac495271d0f': 'DAI',
     '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2': 'WETH',
     '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599': 'WBTC',
-    '0x5f4ec3df9cbd43714fe2740f5e3616155c5b8419': 'Chainlink ETH/USD',
     '0x40ec5b33f54e0e8a33a975908c5ba1c14e5bbbdf': 'Polygon Bridge',
-    '0xa58d7a5f0e11c1c50e47416b48caf8e0b3f5b7e0': 'Arbitrum Bridge',
   },
   // Base
   8453: {
@@ -54,14 +52,12 @@ const KNOWN_LABELS: Record<number, Record<string, string>> = {
     '0x2626664c2603336e57b271c5c0b26f421741e481': 'Uniswap V3 Router',
     '0x198ef1ec325a96cc354c7266a038be8b5c558f67': 'Aerodrome Router',
     '0xcf77a3ba9a5ca399b7c97c74d54e5b1beb874e43': 'Aerodrome Factory',
-    '0x6200000000000000000000000000000000000001': 'Base Bridge (L2StandardBridge)',
     '0x4200000000000000000000000000000000000010': 'Base L2StandardBridge',
     '0x4200000000000000000000000000000000000006': 'WETH (Base)',
-    '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913': 'USDC (Base)',
+    '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913': 'USDC',
     '0x50c5725949a6f0c72e6c4a641f24049a917db0cb': 'DAI (Base)',
     '0xd9aaec86b65d86f6a7b5b1b0c42ffa531710b6ca': 'USDbC',
     '0x2ae3f1ec7f1f5012cfeab0185bfc7aa3cf0dec22': 'cbETH',
-    '0xac1bd2486aaf3b5c0fc3fd868558b082a531b2b4': 'toshi',
     '0x940181a94a35a4569e4529a3cdfb74e38fd98631': 'AERO',
     '0x532f27101965dd16442e59d40670faf5ebb142e4': 'BRETT',
     '0x1111111254eeb25477b68fb85ed929f73a960582': '1inch v5',
@@ -82,7 +78,6 @@ const KNOWN_LABELS: Record<number, Record<string, string>> = {
     '0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad': 'Uniswap Universal Router',
     '0xaf88d065e77c8cc2239327c5edb3a432268e5831': 'USDC (Arb)',
     '0x82af49447d8a07e3bd95bd0d56f35241523fbab1': 'WETH (Arb)',
-    '0xff970a61a04b1ca14834a43f5de4533ebddb5cc8': 'USDC.e (Arb)',
   },
   // Polygon
   137: {
@@ -101,75 +96,105 @@ const KNOWN_LABELS: Record<number, Record<string, string>> = {
 };
 
 // ─────────────────────────────────────────────
-// ENS resolution (mainnet)
+// Zapper GraphQL (EOA identity resolution)
 // ─────────────────────────────────────────────
 
-const ENS_REGISTRY = '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e' as Address;
-const ENS_REVERSE_RESOLVER_ABI = parseAbi([
-  'function getNames(address[]) view returns (string[])',
-]);
-const ENS_BATCH_RESOLVER = '0x3671aE578E63FdF66ad4F3E12CC0c0d71Ac7510C' as Address; // off-chain multicall
+const ZAPPER_API_KEY = process.env.ZAPPER_API_KEY ?? '17697de5-6320-4b48-9ce1-98e240ee0cc1';
+const ZAPPER_GRAPHQL = 'https://public.zapper.xyz/graphql';
 
-// Basename L2 resolver on Base
-const BASENAME_L2_RESOLVER = '0xC6d566A56A1aFf6508b41f6c90ff131615583BCD' as Address;
-const BASENAME_RESOLVER_ABI = parseAbi([
-  'function getNames(address[]) view returns (string[])',
-]);
-
-const ensCache = new Map<string, string | null>(); // address → name or null
-
-async function resolveEns(address: string): Promise<string | null> {
-  const key = `ens:${address.toLowerCase()}`;
-  if (ensCache.has(key)) return ensCache.get(key) ?? null;
-
-  try {
-    const client = createPublicClient({
-      transport: http('https://cloudflare-eth.com'),
-    });
-
-    const names = await client.readContract({
-      address: ENS_BATCH_RESOLVER,
-      abi: ENS_REVERSE_RESOLVER_ABI,
-      functionName: 'getNames',
-      args: [[address as Address]],
-    });
-
-    const name = names[0] || null;
-    ensCache.set(key, name);
-    return name;
-  } catch {
-    ensCache.set(key, null);
-    return null;
+const ZAPPER_QUERY = `
+  query AccountIdentity($addresses: [Address!]!) {
+    accounts(addresses: $addresses) {
+      displayName { source value }
+      ensRecord { name }
+      basename
+      farcasterProfile { username }
+      lensProfile { handle }
+    }
   }
+`;
+
+interface ZapperAccount {
+  displayName?: { source: string; value: string };
+  ensRecord?: { name: string };
+  basename?: string;
+  farcasterProfile?: { username: string };
+  lensProfile?: { handle: string };
 }
 
-async function resolveBasename(address: string): Promise<string | null> {
-  const key = `base:${address.toLowerCase()}`;
-  if (ensCache.has(key)) return ensCache.get(key) ?? null;
-
+async function zapperBatchResolve(addresses: string[]): Promise<Record<string, string>> {
+  if (!addresses.length) return {};
   try {
-    const client = createPublicClient({
-      transport: http('https://mainnet.base.org'),
+    const resp = await fetch(ZAPPER_GRAPHQL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-zapper-api-key': ZAPPER_API_KEY,
+      },
+      body: JSON.stringify({ query: ZAPPER_QUERY, variables: { addresses } }),
+      signal: AbortSignal.timeout(8000),
     });
-
-    const names = await client.readContract({
-      address: BASENAME_L2_RESOLVER,
-      abi: BASENAME_RESOLVER_ABI,
-      functionName: 'getNames',
-      args: [[address as Address]],
+    if (!resp.ok) return {};
+    const json = await resp.json() as { data?: { accounts?: ZapperAccount[] } };
+    const accounts = json.data?.accounts ?? [];
+    const result: Record<string, string> = {};
+    addresses.forEach((addr, i) => {
+      const a = accounts[i];
+      if (!a) return;
+      if (a.displayName?.value && a.displayName.source !== 'address') {
+        result[addr.toLowerCase()] = a.displayName.value;
+      } else if (a.farcasterProfile?.username) {
+        result[addr.toLowerCase()] = `@${a.farcasterProfile.username}`;
+      } else if (a.lensProfile?.handle) {
+        result[addr.toLowerCase()] = a.lensProfile.handle;
+      } else if (a.ensRecord?.name) {
+        result[addr.toLowerCase()] = a.ensRecord.name;
+      } else if (a.basename) {
+        result[addr.toLowerCase()] = a.basename;
+      }
     });
-
-    const name = names[0] || null;
-    ensCache.set(key, name);
-    return name;
+    return result;
   } catch {
-    ensCache.set(key, null);
-    return null;
+    return {};
   }
 }
 
 // ─────────────────────────────────────────────
-// Main enrichment function
+// Thirdweb social profiles (fallback)
+// ─────────────────────────────────────────────
+
+const THIRDWEB_CLIENT_ID = process.env.THIRDWEB_CLIENT_ID ?? '856567926d85c87c4aa2c7162f4c95be';
+
+let twClient: ReturnType<typeof createThirdwebClient> | null = null;
+function getThirdwebClient() {
+  if (!twClient) {
+    twClient = createThirdwebClient({ clientId: THIRDWEB_CLIENT_ID });
+  }
+  return twClient;
+}
+
+async function thirdwebResolve(address: string): Promise<string | null> {
+  try {
+    const client = getThirdwebClient();
+    const profiles = await getSocialProfiles({ address: address as Address, client });
+    const best =
+      profiles.find((p) => p.type === 'farcaster') ??
+      profiles.find((p) => p.type === 'lens') ??
+      profiles.find((p) => p.type === 'ens');
+    return best?.name ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// ─────────────────────────────────────────────
+// In-memory cache
+// ─────────────────────────────────────────────
+
+const labelCache = new Map<string, string>();
+
+// ─────────────────────────────────────────────
+// Public API
 // ─────────────────────────────────────────────
 
 export function shortenAddress(addr: string): string {
@@ -178,12 +203,7 @@ export function shortenAddress(addr: string): string {
 }
 
 /**
- * Resolve an address to the best human-readable label.
- * Returns the label if found, otherwise a shortened address.
- *
- * @param address  EVM address (any case)
- * @param chainId  Chain to check known labels for
- * @param resolve  Whether to attempt ENS/Basename resolution (slower, async)
+ * Resolve a single address to the best human-readable label.
  */
 export async function labelAddress(
   address: string,
@@ -192,39 +212,76 @@ export async function labelAddress(
 ): Promise<string> {
   const lower = address.toLowerCase();
 
-  // 1. Check chain-specific known labels
-  const chainLabels = KNOWN_LABELS[chainId] ?? {};
-  if (chainLabels[lower]) return chainLabels[lower];
-
-  // 2. Check cross-chain known labels (chainId 0 = all chains)
-  const globalLabels = KNOWN_LABELS[0] ?? {};
-  if (globalLabels[lower]) return globalLabels[lower];
+  // 1. Chain-specific known label
+  if (KNOWN_LABELS[chainId]?.[lower]) return KNOWN_LABELS[chainId][lower];
+  // 2. Global known label
+  if (KNOWN_LABELS[0]?.[lower]) return KNOWN_LABELS[0][lower];
 
   if (!resolve) return shortenAddress(address);
 
-  // 3. Try Basename (Base chain — fast, most relevant for Base users)
-  if (chainId === 8453) {
-    const basename = await resolveBasename(address);
-    if (basename) return basename;
+  // 3. Cache
+  const cacheKey = `${chainId}:${lower}`;
+  if (labelCache.has(cacheKey)) return labelCache.get(cacheKey)!;
+
+  // 4. Zapper (best single source — covers ENS, Farcaster, Lens, Basenames)
+  const zapperResults = await zapperBatchResolve([address]);
+  if (zapperResults[lower]) {
+    labelCache.set(cacheKey, zapperResults[lower]);
+    return zapperResults[lower];
   }
 
-  // 4. Try ENS (mainnet or any chain — use for EOA addresses)
-  const ens = await resolveEns(address);
-  if (ens) return ens;
+  // 5. Thirdweb social profiles fallback
+  const tw = await thirdwebResolve(address);
+  if (tw) {
+    labelCache.set(cacheKey, tw);
+    return tw;
+  }
 
-  // 5. Fallback to shortened address
-  return shortenAddress(address);
+  // 6. Shortened address
+  const short = shortenAddress(address);
+  labelCache.set(cacheKey, short);
+  return short;
 }
 
 /**
- * Enrich multiple addresses at once (parallel resolution).
+ * Batch-resolve multiple addresses efficiently (single Zapper call for all unknowns).
  */
 export async function labelAddresses(
   addresses: string[],
   chainId: number,
 ): Promise<Record<string, string>> {
-  const results = await Promise.all(
-    addresses.map(async (addr) => [addr, await labelAddress(addr, chainId)] as [string, string]),
-  );
-  return Object.fromEntries(results);
+  const result: Record<string, string> = {};
+  const needsResolution: string[] = [];
+
+  for (const addr of addresses) {
+    const lower = addr.toLowerCase();
+    // Check known labels first
+    if (KNOWN_LABELS[chainId]?.[lower]) { result[addr] = KNOWN_LABELS[chainId][lower]; continue; }
+    if (KNOWN_LABELS[0]?.[lower]) { result[addr] = KNOWN_LABELS[0][lower]; continue; }
+    const cacheKey = `${chainId}:${lower}`;
+    if (labelCache.has(cacheKey)) { result[addr] = labelCache.get(cacheKey)!; continue; }
+    needsResolution.push(addr);
+  }
+
+  if (needsResolution.length > 0) {
+    // Single Zapper batch call for all unknowns
+    const zapperResults = await zapperBatchResolve(needsResolution);
+
+    // Thirdweb fallback for those Zapper couldn't resolve
+    await Promise.all(needsResolution.map(async (addr) => {
+      const lower = addr.toLowerCase();
+      const cacheKey = `${chainId}:${lower}`;
+      if (zapperResults[lower]) {
+        result[addr] = zapperResults[lower];
+        labelCache.set(cacheKey, zapperResults[lower]);
+      } else {
+        const tw = await thirdwebResolve(addr);
+        const label = tw ?? shortenAddress(addr);
+        result[addr] = label;
+        labelCache.set(cacheKey, label);
+      }
+    }));
+  }
+
+  return result;
 }
