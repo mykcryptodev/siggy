@@ -234,7 +234,8 @@ export async function upsertSafeTransaction(params: {
     .onConflictDoUpdate({
       target: [safeTransactions.safeTxHash, safeTransactions.chainId],
       set: {
-        status: params.status,
+        // Never overwrite watermarked status — watermarked = "we saw this at signup, don't notify"
+        status: sql`CASE WHEN ${safeTransactions.status} = 'watermarked' THEN ${safeTransactions.status} ELSE ${params.status} END`,
         confirmationCount: params.confirmationCount,
         onChainHash: params.onChainHash,
         decodedSummary: params.decodedSummary,
