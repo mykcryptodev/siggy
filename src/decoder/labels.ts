@@ -4,12 +4,15 @@
  * Priority order:
  * 1. Known contracts (curated hardcoded list, per-chain)
  * 2. Zapper GraphQL API (ENS, Farcaster, Lens, Basenames, display names — all in one call)
- * 3. Thirdweb social profiles (Farcaster, Lens, ENS fallback)
- * 4. Shortened address fallback
+ * 3. ENS reverse resolution via mainnet viem (catches primary names Zapper misses)
+ * 4. Thirdweb social profiles (Farcaster, Lens, ENS fallback)
+ * 5. Shortened address fallback
  */
 
 import { createThirdwebClient } from 'thirdweb';
 import { getSocialProfiles } from 'thirdweb/social';
+import { createPublicClient, http } from 'viem';
+import { mainnet } from 'viem/chains';
 import type { Address } from 'viem';
 
 // ─────────────────────────────────────────────
@@ -141,7 +144,9 @@ async function zapperBatchResolve(addresses: string[]): Promise<Record<string, s
     addresses.forEach((addr, i) => {
       const a = accounts[i];
       if (!a) return;
-      if (a.displayName?.value && a.displayName.source !== 'address') {
+      // Zapper returns source as "ADDRESS" (uppercase) when no identity found — normalise before comparing
+      const source = a.displayName?.source?.toLowerCase();
+      if (a.displayName?.value && source !== 'address') {
         result[addr.toLowerCase()] = a.displayName.value;
       } else if (a.farcasterProfile?.username) {
         result[addr.toLowerCase()] = `@${a.farcasterProfile.username}`;
@@ -156,6 +161,28 @@ async function zapperBatchResolve(addresses: string[]): Promise<Record<string, s
     return result;
   } catch {
     return {};
+  }
+}
+
+// ─────────────────────────────────────────────
+// ENS reverse resolution via mainnet viem client
+// ─────────────────────────────────────────────
+
+let ensClient: ReturnType<typeof createPublicClient> | null = null;
+function getEnsClient() {
+  if (!ensClient) {
+    ensClient = createPublicClient({ chain: mainnet, transport: http('https://cloudflare-eth.com') });
+  }
+  return ensClient;
+}
+
+async function ensResolve(address: string): Promise<string | null> {
+  try {
+    const client = getEnsClient();
+    const name = await client.getEnsName({ address: address as Address });
+    return name ?? null;
+  } catch {
+    return null;
   }
 }
 
@@ -230,14 +257,21 @@ export async function labelAddress(
     return zapperResults[lower];
   }
 
-  // 5. Thirdweb social profiles fallback
+  // 5. ENS reverse resolution (catches primary names Zapper missed)
+  const ens = await ensResolve(address);
+  if (ens) {
+    labelCache.set(cacheKey, ens);
+    return ens;
+  }
+
+  // 6. Thirdweb social profiles fallback
   const tw = await thirdwebResolve(address);
   if (tw) {
     labelCache.set(cacheKey, tw);
     return tw;
   }
 
-  // 6. Shortened address
+  // 7. Shortened address
   const short = shortenAddress(address);
   labelCache.set(cacheKey, short);
   return short;
@@ -267,7 +301,7 @@ export async function labelAddresses(
     // Single Zapper batch call for all unknowns
     const zapperResults = await zapperBatchResolve(needsResolution);
 
-    // Thirdweb fallback for those Zapper couldn't resolve
+    // ENS + Thirdweb fallback for those Zapper couldn't resolve
     await Promise.all(needsResolution.map(async (addr) => {
       const lower = addr.toLowerCase();
       const cacheKey = `${chainId}:${lower}`;
@@ -275,6 +309,13 @@ export async function labelAddresses(
         result[addr] = zapperResults[lower];
         labelCache.set(cacheKey, zapperResults[lower]);
       } else {
+        // ENS reverse lookup before thirdweb
+        const ens = await ensResolve(addr);
+        if (ens) {
+          result[addr] = ens;
+          labelCache.set(cacheKey, ens);
+          return;
+        }
         const tw = await thirdwebResolve(addr);
         const label = tw ?? shortenAddress(addr);
         result[addr] = label;
