@@ -52,6 +52,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       safesProcessed: results.length,
       notificationsSent: totalNotifications,
       errors: errors.length,
+      errorDetails: errors.map(e => ({ safe: e.safeAddress, error: e.error })),
       elapsedMs: elapsed,
     });
   } catch (err) {
