@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Siggy — Your Smart Multisig Guardian</title>
+  <meta name="description" content="Siggy the Parrot keeps a watchful eye on your Gnosis Safe multisigs. Get instant Telegram notifications when transactions are proposed, executed, or cancelled." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Inter:wght@400;500;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root {
+      --siggy-cyan: #00D4FF;
+      --siggy-turquoise: #00E5CC;
+      --siggy-mint: #5EF2A0;
+      --siggy-lime: #B8FF6B;
+      --siggy-yellow: #FFE55C;
+      --siggy-gradient: linear-gradient(135deg, #00D4FF 0%, #00E5CC 25%, #5EF2A0 50%, #B8FF6B 75%, #FFE55C 100%);
+      --siggy-gradient-soft: linear-gradient(135deg, rgba(0,212,255,0.1) 0%, rgba(0,229,204,0.1) 25%, rgba(94,242,160,0.1) 50%, rgba(184,255,107,0.1) 75%, rgba(255,229,92,0.1) 100%);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #1a1a2e;
+      background-image: var(--siggy-gradient-soft);
+      background-attachment: fixed;
+      color: #e8e8f0;
+      min-height: 100vh;
+      margin: 0;
+    }
+
+    h1, h2, h3, .font-display {
+      font-family: 'Lilita One', cursive;
+    }
+
+    /* Gradient text utility */
+    .gradient-text {
+      background: var(--siggy-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* Header gradient border */
+    .header-border {
+      border-bottom: 2px solid transparent;
+      border-image: var(--siggy-gradient) 1;
+    }
+
+    /* Gradient border card */
+    .gradient-border {
+      position: relative;
+      background: #12122a;
+      border-radius: 1rem;
+    }
+    .gradient-border::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 1rem;
+      padding: 2px;
+      background: var(--siggy-gradient);
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      pointer-events: none;
+    }
+
+    /* CTA button */
+    .cta-btn {
+      background: var(--siggy-gradient);
+      color: #1a1a2e;
+      font-family: 'Inter', sans-serif;
+      font-weight: 700;
+      font-size: 1.1rem;
+      padding: 1rem 2rem;
+      border-radius: 1rem;
+      border: none;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      box-shadow: 0 4px 24px rgba(0, 212, 255, 0.3);
+    }
+    .cta-btn:hover {
+      transform: translateY(-2px) scale(1.03);
+      box-shadow: 0 8px 32px rgba(0, 212, 255, 0.5);
+    }
+
+    /* How it works card */
+    .how-card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 1.25rem;
+      padding: 2rem 1.5rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    .how-card:hover {
+      transform: translateY(-8px);
+      box-shadow: 0 12px 40px rgba(0, 212, 255, 0.15);
+    }
+    .how-card:hover .card-img {
+      animation: wiggle 0.5s ease-in-out;
+    }
+
+    /* Commands card */
+    .commands-card {
+      background: rgba(0,0,0,0.4);
+      border-radius: 1rem;
+      padding: 2rem;
+      max-width: 700px;
+      margin: 0 auto;
+      position: relative;
+      overflow: hidden;
+    }
+    .commands-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 1rem;
+      padding: 2px;
+      background: var(--siggy-gradient);
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      pointer-events: none;
+    }
+
+    .command-row {
+      display: flex;
+      gap: 0.75rem;
+      align-items: baseline;
+      padding: 0.6rem 0;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .command-row:last-child {
+      border-bottom: none;
+    }
+    .command-name {
+      font-family: 'Courier New', monospace;
+      font-size: 0.95rem;
+      color: #5EF2A0;
+      white-space: nowrap;
+      min-width: 200px;
+    }
+    .command-desc {
+      font-family: 'Inter', sans-serif;
+      font-size: 0.9rem;
+      color: rgba(232, 232, 240, 0.7);
+    }
+
+    /* Animations */
+    @keyframes wiggle {
+      0%, 100% { transform: rotate(0deg); }
+      25% { transform: rotate(-3deg); }
+      75% { transform: rotate(3deg); }
+    }
+    @keyframes bounce-gentle {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-10px); }
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-8px); }
+    }
+
+    .hover-wiggle:hover {
+      animation: wiggle 0.5s ease-in-out;
+    }
+    .hover-bounce:hover {
+      animation: bounce-gentle 0.6s ease-in-out;
+    }
+    .hero-img {
+      animation: float 4s ease-in-out infinite;
+      cursor: pointer;
+    }
+    .hero-img:hover {
+      animation: wiggle 0.5s ease-in-out;
+    }
+
+    /* Section heading */
+    .section-title {
+      font-family: 'Lilita One', cursive;
+      font-size: 2rem;
+      text-align: center;
+      margin-bottom: 0.5rem;
+    }
+    .section-sub {
+      text-align: center;
+      color: rgba(232, 232, 240, 0.6);
+      margin-bottom: 2.5rem;
+      font-size: 1.05rem;
+    }
+
+    /* Theme toggle */
+    .theme-toggle {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 1.1rem;
+      transition: background 0.2s;
+    }
+    .theme-toggle:hover {
+      background: rgba(255,255,255,0.15);
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .command-row {
+        flex-direction: column;
+        gap: 0.25rem;
+      }
+      .command-name {
+        min-width: unset;
+      }
+      .how-grid {
+        grid-template-columns: 1fr !important;
+      }
+    }
+
+    /* Step number badge */
+    .step-badge {
+      background: var(--siggy-gradient);
+      color: #1a1a2e;
+      font-family: 'Lilita One', cursive;
+      font-size: 1rem;
+      width: 2rem;
+      height: 2rem;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 1rem;
+    }
+
+    /* Glow dots background decoration */
+    .glow-dot {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(80px);
+      opacity: 0.08;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header-border sticky top-0 z-50" style="background: rgba(26,26,46,0.85); backdrop-filter: blur(12px); height: 80px;">
+    <div style="max-width: 1100px; margin: 0 auto; padding: 0 1.5rem; height: 100%; display: flex; align-items: center; justify-content: space-between;">
+      <!-- Logo -->
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <img src="/images/siggy.png" alt="Siggy" style="width: 48px; height: 48px; object-fit: contain;" />
+        <span class="font-display gradient-text" style="font-size: 1.8rem; letter-spacing: -0.5px;">Siggy</span>
+      </div>
+      <!-- Nav + theme toggle -->
+      <div style="display: flex; align-items: center; gap: 1.5rem;">
+        <a href="#how-it-works" style="color: rgba(232,232,240,0.7); text-decoration: none; font-size: 0.95rem; transition: color 0.2s;" onmouseover="this.style.color='#5EF2A0'" onmouseout="this.style.color='rgba(232,232,240,0.7)'">How It Works</a>
+        <a href="#commands" style="color: rgba(232,232,240,0.7); text-decoration: none; font-size: 0.95rem; transition: color 0.2s;" onmouseover="this.style.color='#5EF2A0'" onmouseout="this.style.color='rgba(232,232,240,0.7)'">Commands</a>
+        <button class="theme-toggle" aria-label="Toggle theme" onclick="this.textContent = this.textContent === '🌙' ? '☀️' : '🌙'">🌙</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <section style="padding: 5rem 1.5rem 4rem; text-align: center; position: relative; overflow: hidden;">
+    <!-- Background glow decorations -->
+    <div class="glow-dot" style="width: 400px; height: 400px; background: #00D4FF; top: -100px; left: -100px;"></div>
+    <div class="glow-dot" style="width: 300px; height: 300px; background: #5EF2A0; bottom: -50px; right: -50px;"></div>
+
+    <div style="max-width: 800px; margin: 0 auto; position: relative;">
+      <!-- Hero image -->
+      <img
+        src="/images/siggy.png"
+        alt="Siggy the Parrot"
+        class="hero-img"
+        style="width: 192px; height: 192px; object-fit: contain; margin: 0 auto 2rem; display: block;"
+      />
+
+      <!-- H1 -->
+      <h1 class="font-display" style="font-size: clamp(2.8rem, 7vw, 4.5rem); line-height: 1.1; margin-bottom: 1rem;">
+        Meet <span class="gradient-text">Siggy!</span>
+      </h1>
+
+      <!-- H2 -->
+      <h2 style="font-family: 'Lilita One', cursive; font-size: clamp(1.2rem, 3vw, 1.8rem); color: rgba(232,232,240,0.75); margin-bottom: 1.5rem; font-weight: normal;">
+        Your Smart Multisig Guardian
+      </h2>
+
+      <!-- Body -->
+      <p style="font-size: 1.1rem; line-height: 1.75; color: rgba(232,232,240,0.72); max-width: 620px; margin: 0 auto 2.5rem;">
+        Siggy the Parrot keeps a watchful eye on your Gnosis Safe multisigs! Get instant Telegram notifications when transactions are proposed, executed, or cancelled. Never miss an important treasury action again! 🚀
+      </p>
+
+      <!-- CTA -->
+      <a href="https://t.me/siggytheparrotbot" target="_blank" rel="noopener noreferrer" class="cta-btn">
+        ✈️ Add @siggytheparrotbot to Telegram
+      </a>
+    </div>
+  </section>
+
+  <!-- How It Works -->
+  <section id="how-it-works" style="padding: 4rem 1.5rem; max-width: 1100px; margin: 0 auto;">
+    <p class="section-title"><span class="gradient-text">How It Works</span></p>
+    <p class="section-sub">Set up in under 2 minutes. Seriously.</p>
+
+    <div class="how-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem;">
+
+      <!-- Card 1 -->
+      <div class="how-card hover-bounce">
+        <div class="step-badge">1</div>
+        <img
+          src="/images/add.png"
+          alt="Add the Bot"
+          class="card-img hover-wiggle"
+          style="width: 180px; height: 180px; object-fit: contain; margin-bottom: 1.25rem; border-radius: 0.75rem;"
+        />
+        <h3 class="gradient-text" style="font-size: 1.3rem; margin-bottom: 0.75rem;">Add the Bot</h3>
+        <p style="color: rgba(232,232,240,0.75); font-size: 0.95rem; line-height: 1.6;">
+          Add <strong style="color: #5EF2A0;">@siggytheparrotbot</strong> to your Telegram group. Siggy joins silently and waits for your command!
+        </p>
+      </div>
+
+      <!-- Card 2 -->
+      <div class="how-card hover-bounce">
+        <div class="step-badge">2</div>
+        <img
+          src="/images/ifitfitsisits.png"
+          alt="Add Your Safes"
+          class="card-img hover-wiggle"
+          style="width: 180px; height: 180px; object-fit: contain; margin-bottom: 1.25rem; border-radius: 0.75rem;"
+        />
+        <h3 class="gradient-text" style="font-size: 1.3rem; margin-bottom: 0.75rem;">Add Your Safes</h3>
+        <p style="color: rgba(232,232,240,0.75); font-size: 0.95rem; line-height: 1.6;">
+          Type <strong style="color: #5EF2A0;">/addsafe</strong> and your Safe address. Siggy starts watching — no history spam, only new activity!
+        </p>
+      </div>
+
+      <!-- Card 3 -->
+      <div class="how-card hover-bounce">
+        <div class="step-badge">3</div>
+        <img
+          src="/images/shouting.png"
+          alt="Get Squawked At"
+          class="card-img hover-wiggle"
+          style="width: 180px; height: 180px; object-fit: contain; margin-bottom: 1.25rem; border-radius: 0.75rem;"
+        />
+        <h3 class="gradient-text" style="font-size: 1.3rem; margin-bottom: 0.75rem;">Get Squawked At!</h3>
+        <p style="color: rgba(232,232,240,0.75); font-size: 0.95rem; line-height: 1.6;">
+          Siggy sends instant alerts when transactions are proposed, executed, or cancelled. Plain English, always!
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Commands Section -->
+  <section id="commands" style="padding: 4rem 1.5rem; max-width: 1100px; margin: 0 auto;">
+    <p class="section-title"><span class="gradient-text">Bot Commands</span></p>
+    <p class="section-sub">Everything Siggy knows how to do</p>
+
+    <div class="commands-card">
+      <div class="command-row">
+        <span class="command-name">/addsafe &lt;address&gt;</span>
+        <span class="command-desc">— Start monitoring a Safe</span>
+      </div>
+      <div class="command-row">
+        <span class="command-name">/removesafe &lt;address&gt;</span>
+        <span class="command-desc">— Stop monitoring a Safe</span>
+      </div>
+      <div class="command-row">
+        <span class="command-name">/listsafes</span>
+        <span class="command-desc">— See all monitored Safes</span>
+      </div>
+      <div class="command-row">
+        <span class="command-name">/status</span>
+        <span class="command-desc">— Check bot status</span>
+      </div>
+      <div class="command-row">
+        <span class="command-name">/help</span>
+        <span class="command-desc">— Show all commands</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Call to action banner -->
+  <section style="padding: 4rem 1.5rem; text-align: center;">
+    <div style="max-width: 700px; margin: 0 auto; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 1.5rem; padding: 3rem 2rem;">
+      <img src="/images/siggy.png" alt="Siggy" style="width: 80px; height: 80px; object-fit: contain; margin: 0 auto 1.5rem; display: block;" />
+      <h2 class="font-display" style="font-size: clamp(1.6rem, 4vw, 2.2rem); margin-bottom: 1rem;">
+        Ready to protect your <span class="gradient-text">treasury?</span>
+      </h2>
+      <p style="color: rgba(232,232,240,0.65); margin-bottom: 2rem; font-size: 1rem; line-height: 1.7;">
+        Join the onchain teams that trust Siggy to keep them informed. Free, open source, and squawking 24/7.
+      </p>
+      <a href="https://t.me/siggytheparrotbot" target="_blank" rel="noopener noreferrer" class="cta-btn">
+        ✈️ Get Started Free
+      </a>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer style="padding: 2.5rem 1.5rem; text-align: center; border-top: 1px solid rgba(255,255,255,0.07);">
+    <div style="max-width: 1100px; margin: 0 auto;">
+      <div style="display: flex; align-items: center; justify-content: center; gap: 0.5rem; margin-bottom: 1rem;">
+        <img src="/images/siggy.png" alt="Siggy" style="width: 32px; height: 32px; object-fit: contain;" />
+        <span style="color: rgba(232,232,240,0.65); font-size: 0.95rem;">
+          Siggy — Built with ❤️ for the onchain community
+        </span>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: center; gap: 1.5rem; flex-wrap: wrap;">
+        <!-- GitHub -->
+        <a
+          href="https://github.com/mykclawd/siggy"
+          target="_blank"
+          rel="noopener noreferrer"
+          style="display: flex; align-items: center; gap: 0.4rem; color: rgba(232,232,240,0.55); text-decoration: none; font-size: 0.9rem; transition: color 0.2s;"
+          onmouseover="this.style.color='#5EF2A0'"
+          onmouseout="this.style.color='rgba(232,232,240,0.55)'"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
+          </svg>
+          GitHub
+        </a>
+        <!-- Telegram -->
+        <a
+          href="https://t.me/siggytheparrotbot"
+          target="_blank"
+          rel="noopener noreferrer"
+          style="display: flex; align-items: center; gap: 0.4rem; color: rgba(232,232,240,0.55); text-decoration: none; font-size: 0.9rem; transition: color 0.2s;"
+          onmouseover="this.style.color='#00D4FF'"
+          onmouseout="this.style.color='rgba(232,232,240,0.55)'"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.833.941z"/>
+          </svg>
+          @siggytheparrotbot
+        </a>
+      </div>
+      <p style="color: rgba(232,232,240,0.25); font-size: 0.8rem; margin-top: 1.5rem;">
+        Open source · Free to use · No registration required
+      </p>
+    </div>
+  </footer>
+
+</body>
+</html>
