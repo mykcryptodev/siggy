@@ -1,3 +1,4 @@
+import { getAddress } from 'viem';
 import { getChain } from '../chains.js';
 import { z } from 'zod';
 
@@ -84,7 +85,8 @@ export async function fetchMultisigTransactions(
   limit: number = DEFAULT_LIMIT,
 ): Promise<SafeMultisigTransaction[]> {
   const chain = getChain(chainId);
-  const url = `${chain.stsBaseUrl}/api/v1/safes/${safeAddress}/multisig-transactions/?ordering=-nonce&limit=${limit}`;
+  const checksummedAddress = getAddress(safeAddress); // STS requires EIP-55 checksummed address
+  const url = `${chain.stsBaseUrl}/api/v1/safes/${checksummedAddress}/multisig-transactions/?ordering=-nonce&limit=${limit}`;
 
   let response: Response;
   try {
@@ -151,10 +153,11 @@ export async function fetchAllTxHashesForWatermark(
   chainId: number,
 ): Promise<string[]> {
   const chain = getChain(chainId);
+  const checksummedAddress = getAddress(safeAddress); // STS requires EIP-55 checksummed address
   const allHashes: string[] = [];
   const MAX_WATERMARK_TXS = 500;
   let url: string | null =
-    `${chain.stsBaseUrl}/api/v1/safes/${safeAddress}/multisig-transactions/?limit=100&ordering=-nonce`;
+    `${chain.stsBaseUrl}/api/v1/safes/${checksummedAddress}/multisig-transactions/?limit=100&ordering=-nonce`;
 
   while (url && allHashes.length < MAX_WATERMARK_TXS) {
     let response: Response;
