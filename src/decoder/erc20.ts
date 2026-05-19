@@ -1,5 +1,6 @@
 import { createPublicClient, http, type Address, type Hex, parseAbi, formatUnits } from 'viem';
 import { getChain } from '../chains.js';
+import { labelAddress, shortenAddress } from './labels.js';
 
 // ERC-20 function selectors
 export const ERC20_SELECTORS = {
@@ -56,11 +57,6 @@ export async function fetchTokenInfo(
   }
 }
 
-function shortenAddress(addr: string): string {
-  if (addr.length < 10) return addr;
-  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
-}
-
 function formatTokenAmount(raw: bigint, decimals: number, symbol: string): string {
   const formatted = formatUnits(raw, decimals);
   // Round to at most 6 decimal places for readability
@@ -108,9 +104,10 @@ export async function decodeErc20Transfer(
       amountStr = `${amount.toString()} (raw units) of ${shortenAddress(tokenAddress)}`;
     }
 
+    const recipientLabel = await labelAddress(recipient, chainId);
     return {
       type: 'erc20_transfer',
-      summary: `Sending ${amountStr} to ${shortenAddress(recipient)}`,
+      summary: `Sending ${amountStr} to ${recipientLabel}`,
     };
   } catch {
     return null;
@@ -155,11 +152,12 @@ export async function decodeErc20Approve(
       amountStr = `${amount.toString()} (raw units) of ${shortenAddress(tokenAddress)}`;
     }
 
-    const tokenLabel = tokenInfo ? tokenInfo.symbol : shortenAddress(tokenAddress);
+    const tokenLabel = tokenInfo ? tokenInfo.symbol : await labelAddress(tokenAddress, chainId, false);
+    const spenderLabel = await labelAddress(spender, chainId);
 
     return {
       type: 'erc20_approve',
-      summary: `Granting approval for ${amountStr} ${tokenLabel} to ${shortenAddress(spender)}`,
+      summary: `Granting approval for ${amountStr} ${tokenLabel} to ${spenderLabel}`,
       warnings: warnings.length > 0 ? warnings : undefined,
     };
   } catch {
@@ -200,9 +198,11 @@ export async function decodeErc20TransferFrom(
       amountStr = `${amount.toString()} (raw units) of ${shortenAddress(tokenAddress)}`;
     }
 
+    const fromLabel = await labelAddress(from, chainId);
+    const toLabel = await labelAddress(to, chainId);
     return {
       type: 'erc20_transfer',
-      summary: `Transferring ${amountStr} from ${shortenAddress(from)} to ${shortenAddress(to)}`,
+      summary: `Transferring ${amountStr} from ${fromLabel} to ${toLabel}`,
     };
   } catch {
     return null;

@@ -6,6 +6,7 @@ import {
   decodeErc20TransferFrom,
 } from './erc20.js';
 import { describeFunctionCall } from './fourbyte.js';
+import { labelAddress } from './labels.js';
 import type { DecodedSummaryJson, TxType } from '../db/schema.js';
 
 export interface RawTransactionData {
@@ -13,11 +14,6 @@ export interface RawTransactionData {
   value: string; // wei as string
   data: string | null; // calldata hex or null
   chainId: number;
-}
-
-function shortenAddress(addr: string): string {
-  if (addr.length < 10) return addr;
-  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
 function getSelector(calldata: string): string {
@@ -39,9 +35,10 @@ export async function decodeTx(tx: RawTransactionData): Promise<DecodedSummaryJs
   if ((calldata === '0x' || calldata === '') && value > 0n) {
     const ethAmount = formatEther(value);
     const displayEth = parseFloat(ethAmount).toFixed(6).replace(/\.?0+$/, '');
+    const toLabel = to ? await labelAddress(to, tx.chainId) : '?';
     return {
       type: 'eth_transfer' as TxType,
-      summary: `Sending ${displayEth} ETH to ${shortenAddress(to)}`,
+      summary: `Sending ${displayEth} ETH to ${toLabel}`,
       confidence: 'high',
     };
   }
@@ -94,11 +91,12 @@ export async function decodeTx(tx: RawTransactionData): Promise<DecodedSummaryJs
   // ──────────────────────────────────────────────
   // Layer 3: 4byte.directory lookup
   // ──────────────────────────────────────────────
+  const toLabel = to ? await labelAddress(to, tx.chainId) : '?';
   const funcDesc = await describeFunctionCall(selector, to);
   if (!funcDesc.includes('unknown function')) {
     return {
       type: 'contract_call',
-      summary: funcDesc,
+      summary: `${funcDesc} on ${toLabel}`,
       confidence: 'medium',
     };
   }
@@ -106,11 +104,11 @@ export async function decodeTx(tx: RawTransactionData): Promise<DecodedSummaryJs
   // ──────────────────────────────────────────────
   // Layer 4 (fallback): Unknown interaction
   // ──────────────────────────────────────────────
-  return buildFallback(to, value, calldata, funcDesc);
+  return buildFallback(toLabel, value, calldata, funcDesc);
 }
 
 function buildFallback(
-  to: string,
+  toLabel: string,
   value: bigint,
   calldata: string,
   hint?: string,
@@ -120,7 +118,7 @@ function buildFallback(
   if (hint) {
     parts.push(hint);
   } else {
-    parts.push(`A complex contract interaction (could not fully decode)`);
+    parts.push(`Complex interaction with ${toLabel} (could not fully decode)`);
   }
 
   if (value > 0n) {

@@ -1,14 +1,10 @@
 import { getChain, getSafeAppUrl, getExplorerTxUrl } from '../chains.js';
 import type { safeTransactions } from '../db/schema.js';
 import type { NotificationType, DecodedSummaryJson } from '../db/schema.js';
+import { labelAddress, shortenAddress } from '../decoder/labels.js';
 import { formatEther } from 'viem';
 
 type SafeTx = typeof safeTransactions.$inferSelect;
-
-function shortenAddress(addr: string): string {
-  if (addr.length < 10) return addr;
-  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
-}
 
 function escapeHtml(str: string): string {
   return str
