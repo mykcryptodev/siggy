@@ -10,7 +10,7 @@ A Telegram bot that monitors Gnosis Safe multisig wallets and posts human-readab
 - 🔍 **Human-readable decoding** — ERC-20 transfers, approvals, and unknown calldata via 4byte.directory
 - 🚫 **No history spam** — watermarks existing transactions on add
 - 🔐 **Admin-only management** — only group admins can add/remove Safes
-- 🌐 **Multi-chain** — Ethereum, Base, Optimism, Arbitrum, Polygon, Gnosis
+- 🌐 **Multi-chain** — Ethereum, Base, Optimism, Arbitrum, Polygon, Gnosis, Robinhood Chain
 
 ## Tech Stack
 
@@ -116,6 +116,7 @@ With chain and optional label:
 | Arbitrum | 42161 |
 | Polygon | 137 |
 | Gnosis | 100 |
+| Robinhood Chain | 4663 |
 
 ## Architecture
 
