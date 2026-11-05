@@ -60,6 +60,16 @@ export const CHAINS: Record<number, ChainConfig> = {
     nativeCurrency: 'MATIC',
     safePrefix: 'matic',
   },
+  4663: {
+    chainId: 4663,
+    name: 'Robinhood Chain',
+    shortName: 'robinhood',
+    stsBaseUrl: 'https://api.safe.global/tx-service/robinhood',
+    explorerBaseUrl: 'https://robinhoodchain.blockscout.com',
+    rpcUrl: 'https://rpc.mainnet.chain.robinhood.com',
+    nativeCurrency: 'ETH',
+    safePrefix: 'robinhood',
+  },
   100: {
     chainId: 100,
     name: 'Gnosis',
